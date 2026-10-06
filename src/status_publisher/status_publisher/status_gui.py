@@ -7,11 +7,9 @@ from PyQt5 import QtWidgets
 from PyQt5.QtCore import QTimer
 from PyQt5.QtWidgets import QMainWindow
 
-class StatusWindow(QMainWindow, Node):
+class StatusWindow(QMainWindow):
     def __init__(self, parent=None):
-        QMainWindow.__init__(self, parent)
-        Node.__init__(self, "status_gui")
-
+        super().__init__(parent)
         self.setWindowTitle('系统状态监控')
         self.setGeometry(100, 100, 500, 400)
 
@@ -36,11 +34,14 @@ class StatusWindow(QMainWindow, Node):
             self.layout.addWidget(label)
             self.labels[key] = label
 
-        self.subscription = self.create_subscription(
+        # 【关键修改】将 ROS2 节点作为窗口内部的属性，而不是父类
+        self.node = Node("status_gui")
+        self.subscription = self.node.create_subscription(
             SystemStatus, 'sys_status', self.status_callback, 10
         )
 
     def status_callback(self, msg):
+        print(f"窗口收到数据! CPU: {msg.cpu_percent}")
         data = {
             'stamp': f"{msg.stamp.sec}.{msg.stamp.nanosec}",
             'hostname': msg.hostname,
@@ -64,8 +65,10 @@ def main():
     app = QtWidgets.QApplication(sys.argv)
     window = StatusWindow()
     window.show()
+
     executor = MultiThreadedExecutor()
-    executor.add_node(window)
+    executor.add_node(window.node)
+
     app.processEvents()
     while rclpy.ok():
         try:
@@ -73,9 +76,10 @@ def main():
         except Exception:
             pass
         app.processEvents()
+
     app.quit()
-    executor.remove_node(window)
-    window.destroy_node()
+    executor.remove_node(window.node)
+    window.node.destroy_node()
     rclpy.shutdown()
 
 if __name__ == '__main__':
